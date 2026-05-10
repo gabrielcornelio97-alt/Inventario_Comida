@@ -266,12 +266,15 @@ body{
 .b-sin-fecha{background:rgba(86,86,95,.08);color:var(--muted);}
 
 /* ── SORT PILLS ── */
-.sort-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.sort-row{display:flex;flex-direction:column;gap:6px;}
 .sort-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);white-space:nowrap;}
+.sort-pills-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .sort-pill{
   font-size:11px;font-family:inherit;padding:5px 12px;border-radius:100px;
   border:1px solid var(--border);background:transparent;color:var(--muted2);
-  cursor:pointer;transition:all .18s;font-weight:500;display:flex;align-items:center;gap:4px;
+  cursor:pointer;transition:all .18s;font-weight:500;
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  white-space:nowrap;width:100%;
 }
 .sort-pill:hover{border-color:var(--muted2);color:var(--text);}
 .sort-pill.active{background:var(--s2);color:var(--text);border-color:var(--border2);}
@@ -291,11 +294,12 @@ body{
 }
 .inv-search:focus{border-color:var(--accent);}
 .inv-search::placeholder{color:var(--muted2);}
-.inv-filters{display:flex;gap:6px;flex-wrap:wrap;}
+.inv-filters{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .inv-filter{
   font-size:11px;font-family:inherit;padding:6px 13px;border-radius:100px;
   border:1px solid var(--border);background:transparent;color:var(--muted2);
   cursor:pointer;transition:all .2s;font-weight:500;
+  text-align:center;white-space:nowrap;width:100%;
 }
 .inv-filter:hover{border-color:var(--muted2);}
 .inv-filter.active{background:var(--s3);color:var(--text);border-color:var(--border2);}
@@ -493,11 +497,13 @@ body{
         </div>
         <div class="sort-row">
           <span class="sort-lbl">Ordenar</span>
-          <button class="sort-pill" id="sp-prod"  onclick="setSort('prod')">Nombre <span class="sort-arrow" id="sa-prod"></span></button>
-          <button class="sort-pill" id="sp-cat"   onclick="setSort('cat')">Categoría <span class="sort-arrow" id="sa-cat"></span></button>
-          <button class="sort-pill" id="sp-stock" onclick="setSort('stock')">Stock <span class="sort-arrow" id="sa-stock"></span></button>
-          <button class="sort-pill" id="sp-venc"  onclick="setSort('venc')">Vencimiento <span class="sort-arrow" id="sa-venc"></span></button>
-          <button class="sort-pill" id="sp-status"onclick="setSort('status')">Estado <span class="sort-arrow" id="sa-status"></span></button>
+          <div class="sort-pills-grid">
+            <button class="sort-pill" id="sp-prod"  onclick="setSort('prod')">Nombre <span class="sort-arrow" id="sa-prod"></span></button>
+            <button class="sort-pill" id="sp-cat"   onclick="setSort('cat')">Categoría <span class="sort-arrow" id="sa-cat"></span></button>
+            <button class="sort-pill" id="sp-stock" onclick="setSort('stock')">Stock <span class="sort-arrow" id="sa-stock"></span></button>
+            <button class="sort-pill" id="sp-venc"  onclick="setSort('venc')">Vencimiento <span class="sort-arrow" id="sa-venc"></span></button>
+            <button class="sort-pill" id="sp-status"onclick="setSort('status')">Estado <span class="sort-arrow" id="sa-status"></span></button>
+          </div>
         </div>
       </div>
       <div class="inv-count" id="inv-count"></div>
