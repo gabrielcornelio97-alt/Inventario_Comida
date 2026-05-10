@@ -134,7 +134,28 @@ body{
   border-radius:14px;padding:12px 15px;margin-top:10px;display:none;
 }
 .alert-strip-title{font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;}
-.alert-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.alert-chips{
+  display:flex;flex-wrap:wrap;gap:6px;
+  max-height:calc(3 * (24px + 6px));/* ~3 rows */
+  overflow:hidden;
+  position:relative;
+  transition:max-height .35s ease;
+}
+.alert-chips.expanded{max-height:600px;}
+.alert-chips-fade{
+  position:absolute;bottom:0;left:0;right:0;height:28px;
+  background:linear-gradient(transparent, rgba(30,8,8,.85));
+  pointer-events:none;transition:opacity .25s;
+}
+.alert-chips.expanded .alert-chips-fade{opacity:0;}
+.alert-expand-btn{
+  margin-top:7px;background:none;border:none;
+  font-size:11px;font-weight:700;color:var(--danger);
+  cursor:pointer;font-family:inherit;letter-spacing:.4px;
+  padding:2px 4px;opacity:.85;transition:opacity .2s;
+  display:none;
+}
+.alert-expand-btn:hover{opacity:1;}
 .a-chip{font-size:11px;padding:3px 10px;border-radius:100px;font-weight:600;}
 .a-chip.urgente {background:rgba(245,166,35,.15);color:var(--warn);}
 .a-chip.vencido {background:rgba(240,71,71,.15); color:var(--danger);}
@@ -169,11 +190,12 @@ body{
 .stor-row.alacena  .stor-fill{background:var(--alacena);}
 
 /* ── FILTER PILLS ── */
-.filter-pills{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+.filter-pills{display:flex;gap:7px;flex-wrap:nowrap;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;}
+.filter-pills::-webkit-scrollbar{display:none;}
 .fpill{
   font-size:12px;font-family:inherit;padding:6px 15px;border-radius:100px;
   border:1px solid var(--border2);background:transparent;color:var(--muted2);
-  cursor:pointer;transition:all .2s;font-weight:500;
+  cursor:pointer;transition:all .2s;font-weight:500;white-space:nowrap;flex-shrink:0;
 }
 .fpill:hover{border-color:var(--muted2);color:var(--text);}
 .fpill.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent);font-weight:700;}
@@ -192,7 +214,28 @@ body{
 .chart-wrap.bar{height:190px;}
 
 /* ── EXPIRY LIST ── */
-.expiry-list{display:flex;flex-direction:column;gap:7px;}
+.expiry-list{
+  display:flex;flex-direction:column;gap:7px;
+  max-height:calc(5 * (46px + 7px));/* ~5 rows */
+  overflow:hidden;
+  position:relative;
+  transition:max-height .4s ease;
+}
+.expiry-list.expanded{max-height:2000px;}
+.expiry-list-fade{
+  position:absolute;bottom:0;left:0;right:0;height:48px;
+  background:linear-gradient(transparent, var(--bg));
+  pointer-events:none;transition:opacity .25s;
+}
+.expiry-list.expanded .expiry-list-fade{opacity:0;}
+.expiry-expand-btn{
+  width:100%;margin-top:4px;background:var(--s1);
+  border:1px solid var(--border2);border-radius:10px;
+  font-size:12px;font-weight:600;color:var(--muted2);
+  cursor:pointer;font-family:inherit;padding:8px;
+  transition:all .2s;display:none;letter-spacing:.3px;
+}
+.expiry-expand-btn:hover{border-color:var(--accent);color:var(--accent);}
 .exp-row{
   background:var(--s1);border:1px solid var(--border);border-radius:12px;
   padding:11px 14px;display:flex;align-items:center;justify-content:space-between;
@@ -374,7 +417,10 @@ body{
 
       <div class="alert-strip" id="alert-strip">
         <div class="alert-strip-title">⚠ Requieren atención</div>
-        <div class="alert-chips" id="alert-chips"></div>
+        <div class="alert-chips" id="alert-chips" style="position:relative;">
+          <div class="alert-chips-fade" id="alert-chips-fade"></div>
+        </div>
+        <button class="alert-expand-btn" id="alert-expand-btn" onclick="toggleAlertExpand()">Ver más ▾</button>
       </div>
 
       <div class="section-lbl">Almacenamiento</div>
@@ -425,6 +471,7 @@ body{
 
       <div class="section-lbl" id="expiry-lbl">Próximos vencimientos</div>
       <div class="expiry-list" id="expiry-list"></div>
+      <button class="expiry-expand-btn" id="expiry-expand-btn" onclick="toggleExpiryExpand()">Ver más ▾</button>
 
       <div class="section-lbl" id="consumo-lbl" style="display:none">Consumo reciente</div>
       <div class="consumo-list" id="consumo-list"></div>
@@ -773,10 +820,29 @@ function renderDashboard(){
   const lowStocks = data.filter(d=>isLowStock(d));
   const strip = document.getElementById('alert-strip');
   strip.style.display = (alerted.length || lowStocks.length) ? 'block' : 'none';
-  document.getElementById('alert-chips').innerHTML = [
+  const chipsEl = document.getElementById('alert-chips');
+  const fadeEl  = document.getElementById('alert-chips-fade');
+  const expandBtn = document.getElementById('alert-expand-btn');
+  // Reset state
+  chipsEl.classList.remove('expanded');
+  if(expandBtn) { expandBtn.textContent='Ver más ▾'; expandBtn.style.display='none'; }
+  if(fadeEl) fadeEl.style.opacity='1';
+
+  chipsEl.innerHTML = [
     ...alerted.map(d=>`<span class="a-chip ${d.status}">${esc(d.prod)}</span>`),
     ...lowStocks.map(d=>`<span class="a-chip lowstock">🛒 ${esc(d.prod)} (${d.stock})</span>`)
   ].join('');
+  // Re-append fade overlay (innerHTML wipes it)
+  if(fadeEl) chipsEl.appendChild(fadeEl);
+
+  // Show expand button only if chips overflow 3 rows
+  setTimeout(()=>{
+    if(chipsEl.scrollHeight > chipsEl.clientHeight + 4){
+      if(expandBtn) expandBtn.style.display='inline-block';
+    } else {
+      if(fadeEl) fadeEl.style.opacity='0';
+    }
+  }, 50);
 
   // Charts
   renderCharts(chartFilt);
@@ -803,6 +869,22 @@ function renderDashboard(){
 }
 
 /* ── Charts ── */
+function toggleExpiryExpand(){
+  const list = document.getElementById('expiry-list');
+  const btn  = document.getElementById('expiry-expand-btn');
+  const expanded = list.classList.toggle('expanded');
+  btn.textContent = expanded ? 'Ver menos ▴' : 'Ver más ▾';
+}
+
+function toggleAlertExpand(){
+  const chips = document.getElementById('alert-chips');
+  const btn = document.getElementById('alert-expand-btn');
+  const fade = document.getElementById('alert-chips-fade');
+  const expanded = chips.classList.toggle('expanded');
+  btn.textContent = expanded ? 'Ver menos ▴' : 'Ver más ▾';
+  if(fade) fade.style.opacity = expanded ? '0' : '1';
+}
+
 function setFilt(val, btn){
   chartFilt = val;
   document.querySelectorAll('.filter-pills .fpill').forEach(b=>b.classList.remove('active'));
@@ -861,9 +943,14 @@ function renderExpiry(filt){
     .sort((a,b)=>a.vencDate-b.vencDate)
     .slice(0,10);
 
-  const list = document.getElementById('expiry-list');
+  const list    = document.getElementById('expiry-list');
+  const expBtn  = document.getElementById('expiry-expand-btn');
   document.getElementById('expiry-lbl').textContent = filt==='todos'
     ? 'Próximos vencimientos' : `Próximos vencimientos — ${filt}`;
+
+  // Reset collapse state on re-render
+  list.classList.remove('expanded');
+  if(expBtn){ expBtn.textContent='Ver más ▾'; expBtn.style.display='none'; }
 
   if (!withDates.length){
     list.innerHTML='<div class="empty-state">Sin fechas de vencimiento registradas</div>';
@@ -883,6 +970,20 @@ function renderExpiry(filt){
       </div>
     </div>`;
   }).join('');
+
+  // Append fade overlay
+  const fade = document.createElement('div');
+  fade.className = 'expiry-list-fade';
+  list.appendChild(fade);
+
+  // Show expand button only if content overflows
+  setTimeout(()=>{
+    if(list.scrollHeight > list.clientHeight + 4){
+      if(expBtn) expBtn.style.display='block';
+    } else {
+      fade.style.opacity='0';
+    }
+  }, 50);
 }
 
 /* ═══════════════════ RENDER INVENTARIO ═══════════════════ */
