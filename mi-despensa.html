@@ -313,6 +313,13 @@ body{
 }
 .item-card:hover{transform:translateY(-1px);border-color:var(--border2);}
 .item-card.alert-card{border-color:rgba(240,71,71,.22);}
+.item-card.agotado-card{opacity:.6;border-style:dashed;border-color:var(--border2);}
+.item-card.agotado-card .item-icon{filter:grayscale(1);opacity:.5;}
+.agotado-buy-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;
+  background:rgba(86,86,95,.18);color:var(--muted2);
+}
 .item-icon{
   width:38px;height:38px;border-radius:11px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:17px;
@@ -622,18 +629,25 @@ function parseWorkbook(wb){
   const comprasName = findSheet('compras','compra');
   const consumoName = findSheet('consumo');
 
-  // Get a raw 2D array from a sheet and find the ACTUAL header row
-  // by scanning up to the first 15 rows for one that contains a recognizable column name
+  // Get a raw 2D array from a sheet and find the ACTUAL header row.
+  // A valid header row must: (a) have multiple non-null cells AND
+  // (b) contain at least one signal match AND (c) contain a product-name column.
+  // This prevents title rows like "📦 STOCK ACTUAL — …" from being mistaken for headers.
   function getSheetData(sheetName, ...headerSignals){
     const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null, raw:true});
     let hdrRow = -1;
     for (let i = 0; i < Math.min(aoa.length, 15); i++){
       const row = aoa[i];
       if (!row) continue;
-      const match = row.some(cell =>
+      const nonNull = row.filter(c => c != null);
+      if (nonNull.length < 2) continue; // title rows have only 1 cell
+      const hasSignal = row.some(cell =>
         cell != null && headerSignals.some(sig => normKey(String(cell)).includes(sig))
       );
-      if (match){ hdrRow = i; break; }
+      const hasProd = row.some(cell =>
+        cell != null && ['prod','nombre','name','producto'].some(p => normKey(String(cell)).includes(p))
+      );
+      if (hasSignal && hasProd){ hdrRow = i; break; }
     }
     if (hdrRow === -1) return null;
 
@@ -641,14 +655,16 @@ function parseWorkbook(wb){
     const headers = rawHeaders.map(h => h != null ? normKey(String(h)) : '');
     const findCol = (...needles) => headers.findIndex(h => needles.some(n => h.includes(n)));
     const idx = {
-      prod:  findCol('prod','nombre','name'),
-      stock: findCol('stock'),
-      cant:  findCol('cantidad','cant','qty','amount'),
-      stor:  findCol('almac','ubicac','storage','lugar'),
-      cat:   findCol('categ','tipo','category'),
-      venc:  findCol('venc','expir','caduc'),
-      fecha: findCol('fecha','date'),
-      consm: findCol('consumida','consumed'),
+      prod:    findCol('prod','nombre','name'),
+      stock:   findCol('stock'),
+      cant:    findCol('cantidad','cant','qty','amount'),
+      stor:    findCol('almac','ubicac','storage','lugar'),
+      cat:     findCol('categ','tipo','category'),
+      venc:    findCol('venc','expir','caduc'),
+      fecha:   findCol('fecha','date'),
+      consm:   findCol('consumida','consumed'),
+      comprado:  findCol('comprado','compra','bought'),
+      consumido: findCol('consumido','consume'),
     };
     console.log(sheetName,'headers:', JSON.stringify(headers), 'idx:', JSON.stringify(idx));
     const rows = aoa.slice(hdrRow + 1).filter(r => r && r.some(c => c != null));
@@ -664,7 +680,17 @@ function parseWorkbook(wb){
       rows.forEach(row => {
         const prod = idx.prod >= 0 ? row[idx.prod] : null;
         if (!prod || !String(prod).trim()) return;
-        const stockVal = parseFloat(row[stockColIdx])||0;
+
+        // Prefer computing stock from Comprado - Consumido (more reliable than formula cache)
+        let stockVal;
+        if (idx.comprado >= 0 && idx.consumido >= 0) {
+          const comprado  = parseFloat(row[idx.comprado])  || 0;
+          const consumido = parseFloat(row[idx.consumido]) || 0;
+          stockVal = comprado - consumido;
+        } else {
+          stockVal = parseFloat(row[stockColIdx]) || 0;
+        }
+
         const vencDate = parseDate(idx.venc >= 0 ? row[idx.venc] : null);
         const cat  = idx.cat  >= 0 ? String(row[idx.cat] ||'Sin categoría').trim() : 'Sin categoría';
         const stor = idx.stor >= 0 ? normStor(String(row[idx.stor]||'')) : 'Alacena';
@@ -1030,8 +1056,10 @@ function updateSortUI(){
 
 function applySort(rows){
   if (!sortCol) {
-    // Default: alerts first, then by name
+    // Default: alerts first, agotados always last, then by name
     return rows.sort((a,b) => {
+      const aAgo = a.status==='agotado', bAgo = b.status==='agotado';
+      if (aAgo !== bAgo) return aAgo ? 1 : -1;
       const pa=statPrio(a.status), pb=statPrio(b.status);
       return pa!==pb ? pa-pb : a.prod.localeCompare(b.prod,'es');
     });
@@ -1079,10 +1107,12 @@ function renderInventario(){
     const dias=d.vencDate?Math.round((d.vencDate-today)/86400000):null;
     const diasStr=dias!==null?(dias<0?`Venció hace ${Math.abs(dias)}d`:dias===0?'Vence hoy':`Vence en ${dias}d`):'Sin fecha de venc.';
     const sColor=dias!==null&&dias<=3?'var(--danger)':dias!==null&&dias<=7?'var(--warn)':'var(--muted2)';
+    const isAgotado = d.status === 'agotado';
     const isAlert=['urgente','vencido'].includes(d.status);
     const lowStock = isLowStock(d);
-    const stockCol = lowStock ? '#fbbf24' : stockColor(d.status);
-    return `<div class="item-card${isAlert?' alert-card':''}">
+    const stockCol = isAgotado ? 'var(--muted)' : lowStock ? '#fbbf24' : stockColor(d.status);
+    const cardClass = isAgotado ? ' agotado-card' : isAlert ? ' alert-card' : '';
+    return `<div class="item-card${cardClass}">
       <div class="item-icon ${d.stor}">${icon}</div>
       <div class="item-body">
         <div class="item-top">
@@ -1095,9 +1125,9 @@ function renderInventario(){
         <div class="item-meta">
           <span class="item-cat">${esc(d.cat)}</span>
           <span class="item-stor ${d.stor}">${d.stor}</span>
-          ${lowStock ? `<span class="low-stock-badge">🛒 Stock bajo</span>` : ''}
+          ${isAgotado ? `<span class="agotado-buy-badge">🛒 Comprar</span>` : lowStock ? `<span class="low-stock-badge">🛒 Stock bajo</span>` : ''}
         </div>
-        <div class="item-venc" style="color:${sColor}">${diasStr}${d.vencDate?` · ${d.vencDate.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}`:''}</div>
+        ${isAgotado ? '' : `<div class="item-venc" style="color:${sColor}">${diasStr}${d.vencDate?` · ${d.vencDate.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}`:''}</div>`}
       </div>
     </div>`;
   }).join('');
