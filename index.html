@@ -971,7 +971,7 @@ function renderCharts(filt){
 function renderExpiry(filt){
   const filtered = filt==='todos' ? data : data.filter(d=>d.stor===filt);
   const withDates = filtered
-    .filter(d=>d.vencDate&&!isNaN(d.vencDate))
+    .filter(d=>d.vencDate&&!isNaN(d.vencDate)&&d.status!=='agotado')
     .sort((a,b)=>a.vencDate-b.vencDate)
     .slice(0,10);
 
